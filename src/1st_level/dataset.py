@@ -150,6 +150,7 @@ class LyftDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, item_idx):
         data = self.agent_dataset[item_idx]
+#         np.savez("~/artem/ddata.npz", data)
         return data
 
 

@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import cv2
 import numba
+# from numba.typed import List
 import numpy as np
 from l5kit.data.filter import filter_agents_by_labels, filter_agents_by_track_id
 from l5kit.data.zarr_dataset import AGENT_DTYPE
@@ -526,26 +527,26 @@ class FastSemanticRasterizer(SemanticRasterizer):
         X = []
         EDGES = []
         
-        for i, color in enumerate(["default", "green", "yellow", "red"]):
-            class_index = i + 2
-            for polyline in lanes_lines[color]:
-                previous_node_index = None
-                polyline_index += 1
-                for node_local_num, node in enumerate(polyline):
-                    node_index += 1
-#                     if previous_node_index is not None:
-#                         EDGES.append([previous_node_index, node_index])
-#                     _tmp += 1
-#                     if _tmp % 10 > 0:
-#                         continue
-                    x = [0] * len(IDX)
-                    x[0] = node[0]
-                    x[1] = node[1]
-                    x[IDX[color]] = 1
-                    x[IDX["timestamp"]] = 0
-                    x[IDX["pindex"]] = polyline_index
-                    X.append(x)
-                    previous_node_index = node_index
+#         for i, color in enumerate(["default", "green", "yellow", "red"]):
+#             class_index = i + 2
+#             for polyline in lanes_lines[color]:
+#                 previous_node_index = None
+#                 polyline_index += 1
+#                 for node_local_num, node in enumerate(polyline):
+#                     node_index += 1
+# #                     if previous_node_index is not None:
+# #                         EDGES.append([previous_node_index, node_index])
+# #                     _tmp += 1
+# #                     if _tmp % 10 > 0:
+# #                         continue
+#                     x = [0] * len(IDX)
+#                     x[0] = node[0]
+#                     x[1] = node[1]
+#                     x[IDX[color]] = 1
+#                     x[IDX["timestamp"]] = 0
+#                     x[IDX["pindex"]] = polyline_index
+#                     X.append(x)
+#                     previous_node_index = node_index
                 
 
         # only for testing, positions of TL
@@ -579,20 +580,21 @@ class FastSemanticRasterizer(SemanticRasterizer):
             
             polyline_index += 1
             
+            crosswalks.append(xy_cross)
             
-            for _x,_y in xy_cross:
-                node_index += 1
-#                 if previous_node_index is not None:
-#                     EDGES.append([previous_node_index, node_index])
-                x = [0] * len(IDX)
-                x[0] = _x
-                x[1] = _y
-                x[IDX["crosswalk"]] = 1
-                x[IDX["timestamp"]] = 0
-                x[IDX["pindex"]] = polyline_index
-                X.append(x)
+#             for _x,_y in xy_cross:
+#                 node_index += 1
+# #                 if previous_node_index is not None:
+# #                     EDGES.append([previous_node_index, node_index])
+#                 x = [0] * len(IDX)
+#                 x[0] = _x
+#                 x[1] = _y
+#                 x[IDX["crosswalk"]] = 1
+#                 x[IDX["timestamp"]] = 0
+#                 x[IDX["pindex"]] = polyline_index
+#                 X.append(x)
                 
-                previous_node_index = node_index
+#                 previous_node_index = node_index
                 
                 
 #             print(xy_cross)
@@ -606,7 +608,26 @@ class FastSemanticRasterizer(SemanticRasterizer):
 #             X.append(x)
 
 #         cv2.polylines(img, crosswalks, True, (255, 117, 69), lineType=cv2.LINE_AA, shift=CV2_SHIFT)
-
+        
+#         print(lanes_lines.keys())
+        
+#         LLL = List()
+        lanes_lines["default"].append([1./2.])
+        lanes_lines["green"].append([1./2.])
+        lanes_lines["yellow"].append([1./2.])
+        lanes_lines["red"].append([1./2.])
+        
+#         CWL = List()
+#         CWL.append()
+        
+        X = semantic_fast_stepan(
+            lanes_lines["default"],
+            lanes_lines["green"],
+            lanes_lines["yellow"],
+            lanes_lines["red"],
+            crosswalks
+        )
+        
         non_missing_rasterized_tl_lanes = {tl_face: mask.astype(np.bool)
                                            for tl_face, mask in rasterized_tl_lanes.items()
                                            if np.any(mask)}
@@ -628,6 +649,56 @@ class FastSemanticRasterizer(SemanticRasterizer):
 
     def to_rgb(self, in_im_dict: dict, **kwargs: dict) -> np.ndarray:
         return in_im_dict['image_semantic']
+    
+
+@numba.njit()
+def semantic_fast_stepan(default, green, yellow, red, crosswalks):
+    
+    default, green, yellow, red = default[:-1], green[:-1], yellow[:-1], red[:-1]
+    polyline_index = -1
+    node_index = -1
+    previous_node_index = None
+    color = 0
+    lanes_lines = 1./2.
+    
+    X = []
+# #     EDGES = []
+    
+    for i, (color, lanes_lines) in enumerate(zip([__default__, __green__, __yellow__, __red__], [default, green, yellow, red])):
+        class_index = i + 2
+        print(lanes_lines)
+        for j in range(len(lanes_lines)):
+            polyline = lanes_lines[j]
+            previous_node_index = None
+            polyline_index += 1
+            for k in range(len(polyline)):
+                node = polyline[k]
+                node_index += 1
+
+                x = [0] * 13#len(IDX)
+                x[0] = node[0]
+                x[1] = node[1]
+                x[color] = 1
+                x[__timestamp__] = 0
+                x[__pindex__] = polyline_index
+                X.append(x)
+                previous_node_index = node_index
+    
+    for xy_cross in crosswalks:
+        for i in range(len(xy_cross)):
+            _x,_y = xy_cross[i]
+            node_index += 1
+            x = [0] * 13#len(IDX)
+            x[0] = _x
+            x[1] = _y
+            x[__crosswalk__] = 1
+            x[__timestamp__] = 0
+            x[__pindex__] = polyline_index
+            X.append(x)
+
+            previous_node_index = node_index
+        
+    return X
 
 
 def _load_metadata(meta_key: str, data_manager) -> dict:
